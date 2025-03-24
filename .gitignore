@@ -4,3 +4,4 @@ codes/__*
 .idea/
 codes/.ipynb_checkpoints/
 datasets/.ipynb_checkpoints/
+.venv*/

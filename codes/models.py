@@ -22,306 +22,312 @@ class VAEmodel(BaseModel):
 		self.init_saver()
 
 	def define_iterator(self):
-		self.original_signal = tf.placeholder(tf.float32, [None, self.config['l_win'], self.config['n_channel']])
-		self.seed = tf.placeholder(tf.int64, shape=())
+		tf.compat.v1.disable_eager_execution()  # 关闭 Eager 模式
+		self.original_signal = tf.compat.v1.placeholder(tf.float32, [None, self.config['l_win'], self.config['n_channel']])
+
+		self.seed = tf.compat.v1.placeholder(tf.int64, shape=())
 		self.dataset = tf.data.Dataset.from_tensor_slices(self.original_signal)
 		self.dataset = self.dataset.shuffle(buffer_size=60000, seed=self.seed)
 		self.dataset = self.dataset.repeat(8000)
 		self.dataset = self.dataset.batch(self.config['batch_size'], drop_remainder=True)
-		self.iterator = self.dataset.make_initializable_iterator()
+		self.iterator = tf.compat.v1.data.make_initializable_iterator(self.dataset)
 		self.input_image = self.iterator.get_next()
-		self.code_input = tf.placeholder(tf.float32, [None, self.config['code_size']])
-		self.is_code_input = tf.placeholder(tf.bool)
+		self.code_input = tf.compat.v1.placeholder(tf.float32, [None, self.config['code_size']])
+		self.is_code_input = tf.compat.v1.placeholder(tf.bool)
 		self.sigma2_offset = tf.constant(self.config['sigma2_offset'])
 
 	def build_model(self):
-		init = tf.contrib.layers.xavier_initializer()
-		with tf.variable_scope('encoder'):
+		init = tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution="uniform")
+		with tf.compat.v1.variable_scope('encoder'):
 			input_tensor = tf.expand_dims(self.original_signal, -1)
 			if self.config['l_win'] == 24:
-				conv_1 = tf.layers.conv2d(inputs=tf.pad(input_tensor, [[0, 0], [4, 4], [0, 0], [0, 0]], "SYMMETRIC"),
+				conv_1 = tf.keras.layers.Conv2D(
 										  filters=self.config['num_hidden_units'] / 16,
 										  kernel_size=(3, self.config['n_channel']),
 										  strides=(2, 1),
 										  padding='same',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(tf.pad(input_tensor, [[0, 0], [4, 4], [0, 0], [0, 0]], "SYMMETRIC"))
 				print("conv_1: {}".format(conv_1))
-				conv_2 = tf.layers.conv2d(inputs=conv_1,
+				conv_2 = tf.keras.layers.Conv2D(
 										  filters=self.config['num_hidden_units'] / 8,
 										  kernel_size=(3, self.config['n_channel']),
 										  strides=(2, 1),
 										  padding='same',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(conv_1)
 				print("conv_2: {}".format(conv_2))
-				conv_3 = tf.layers.conv2d(inputs=conv_2,
+				conv_3 = tf.keras.layers.Conv2D(
 										  filters=self.config['num_hidden_units'] / 4,
 										  kernel_size=(3, self.config['n_channel']),
 										  strides=(2, 1),
 										  padding='same',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(conv_2)
 				print("conv_3: {}".format(conv_3))
-				conv_4 = tf.layers.conv2d(inputs=conv_3,
+				conv_4 = tf.keras.layers.Conv2D(
 										  filters=self.config['num_hidden_units'],
 										  kernel_size=(4, self.config['n_channel']),
 										  strides=1,
 										  padding='valid',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(conv_3)
 				print("conv_4: {}".format(conv_4))
 			elif self.config['l_win'] == 48:
-				conv_1 = tf.layers.conv2d(input_tensor,
-										  filters=self.config['num_hidden_units'] / 16,
+				conv_1 = tf.keras.layers.Conv2D(
+										  filters=int(self.config['num_hidden_units'] / 16),
 										  kernel_size=(3, self.config['n_channel']),
 										  strides=(2, 1),
 										  padding='same',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(input_tensor)
 				print("conv_1: {}".format(conv_1))
-				conv_2 = tf.layers.conv2d(inputs=conv_1,
-										  filters=self.config['num_hidden_units'] / 8,
+				conv_2 = tf.keras.layers.Conv2D(
+										  filters=int(self.config['num_hidden_units'] / 8),
 										  kernel_size=(3, self.config['n_channel']),
 										  strides=(2, 1),
 										  padding='same',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(conv_1)
 				print("conv_2: {}".format(conv_2))
-				conv_3 = tf.layers.conv2d(inputs=conv_2,
-										  filters=self.config['num_hidden_units'] / 4,
+				conv_3 = tf.keras.layers.Conv2D(
+										  filters=int(self.config['num_hidden_units'] / 4),
 										  kernel_size=(3, self.config['n_channel']),
 										  strides=(2, 1),
 										  padding='same',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(conv_2)
 				print("conv_3: {}".format(conv_3))
-				conv_4 = tf.layers.conv2d(inputs=conv_3,
-										  filters=self.config['num_hidden_units'],
+				conv_4 = tf.keras.layers.Conv2D(
+										  filters=int(self.config['num_hidden_units']),
 										  kernel_size=(6, self.config['n_channel']),
 										  strides=1,
 										  padding='valid',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(conv_3)
 				print("conv_4: {}".format(conv_4))
 			elif self.config['l_win'] == 144:
-				conv_1 = tf.layers.conv2d(inputs=input_tensor,
+				conv_1 = tf.keras.layers.Conv2D(
 										  filters=self.config['num_hidden_units'] / 16,
 										  kernel_size=(3, self.config['n_channel']),
 										  strides=(4, 1),
 										  padding='same',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(input_tensor)
 				print("conv_1: {}".format(conv_1))
-				conv_2 = tf.layers.conv2d(inputs=conv_1,
+				conv_2 = tf.keras.layers.Conv2D(
 										  filters=self.config['num_hidden_units'] / 8,
 										  kernel_size=(3, self.config['n_channel']),
 										  strides=(4, 1),
 										  padding='same',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(conv_1)
 				print("conv_2: {}".format(conv_2))
-				conv_3 = tf.layers.conv2d(inputs=conv_2,
+				conv_3 = tf.keras.layers.Conv2D(
 										  filters=self.config['num_hidden_units'] / 4,
 										  kernel_size=(3, self.config['n_channel']),
 										  strides=(3, 1),
 										  padding='same',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(conv_2)
 				print("conv_3: {}".format(conv_3))
-				conv_4 = tf.layers.conv2d(inputs=conv_3,
+				conv_4 = tf.keras.layers.Conv2D(
 										  filters=self.config['num_hidden_units'],
 										  kernel_size=(3, self.config['n_channel']),
 										  strides=1,
 										  padding='valid',
 										  activation=tf.nn.leaky_relu,
-										  kernel_initializer=init)
+										  kernel_initializer=init)(conv_3)
 				print("conv_4: {}".format(conv_4))
 
-			encoded_signal = tf.layers.flatten(conv_4)
-			encoded_signal = tf.layers.dense(encoded_signal,
-											 units=self.config['code_size'] * 4,
-											 activation=tf.nn.leaky_relu,
-											 kernel_initializer=init)
-			self.code_mean = tf.layers.dense(encoded_signal,
+			# 展平操作（替换 tf.layers.flatten）
+			encoded_signal = tf.keras.layers.Flatten()(conv_4)
+
+			# 全连接层（替换 tf.keras.layers.Dense）
+			encoded_signal = tf.keras.layers.Dense(
+				units=self.config['code_size'] * 4,  # 保持 units 参数不变
+				kernel_initializer=init,  # 保持初始化器
+				activation=tf.keras.layers.LeakyReLU(alpha=0.2)  # 激活函数调整
+			)(encoded_signal)
+			self.code_mean = tf.keras.layers.Dense(
 											 units=self.config['code_size'],
 											 activation=None,
 											 kernel_initializer=init,
-											 name='code_mean')
-			self.code_std_dev = tf.layers.dense(encoded_signal,
+											 name='code_mean')(encoded_signal)
+			self.code_std_dev = tf.keras.layers.Dense(
 												units=self.config['code_size'],
 												activation=tf.nn.relu,
 												kernel_initializer=init,
-												name='code_std_dev')
+												name='code_std_dev')(encoded_signal)
 			self.code_std_dev = self.code_std_dev + 1e-2
 			mvn = tfp.distributions.MultivariateNormalDiag(loc=self.code_mean, scale_diag=self.code_std_dev)
 			self.code_sample = mvn.sample()
 		print("finish encoder: \n{}".format(self.code_sample))
 		print("\n")
 
-		with tf.variable_scope('decoder'):
+		with tf.compat.v1.variable_scope('decoder'):
 			encoded = tf.cond(self.is_code_input, lambda: self.code_input, lambda: self.code_sample)
-			decoded_1 = tf.layers.dense(encoded,
+			decoded_1 = tf.keras.layers.Dense(
 										units=self.config['num_hidden_units'],
 										activation=tf.nn.leaky_relu,
-										kernel_initializer=init)
+										kernel_initializer=init)(encoded)
 			decoded_1 = tf.reshape(decoded_1, [-1, 1, 1, self.config['num_hidden_units']])
 			if self.config['l_win'] == 24:
-				decoded_2 = tf.layers.conv2d(decoded_1,
+				decoded_2 = tf.keras.layers.Conv2D(
 											 filters=self.config['num_hidden_units'],
 											 kernel_size=1,
 											 padding='same',
-											 activation=tf.nn.leaky_relu)
+											 activation=tf.nn.leaky_relu)(decoded_1)
 				decoded_2 = tf.reshape(decoded_2, [-1, 4, 1, self.config['num_hidden_units'] // 4])
 				print("decoded_2 is: {}".format(decoded_2))
-				decoded_3 = tf.layers.conv2d(decoded_2,
+				decoded_3 = tf.keras.layers.Conv2D(
 											 filters=self.config['num_hidden_units'] // 4,
 											 kernel_size=(3, 1),
 											 strides=1,
 											 padding='same',
 											 activation=tf.nn.leaky_relu,
-											 kernel_initializer=init)
+											 kernel_initializer=init)(decoded_2)
 				decoded_3 = tf.nn.depth_to_space(input=decoded_3,
 												 block_size=2)
 				decoded_3 = tf.reshape(decoded_3, [-1, 8, 1, self.config['num_hidden_units'] // 8])
 				print("decoded_3 is: {}".format(decoded_3))
-				decoded_4 = tf.layers.conv2d(decoded_3,
+				decoded_4 = tf.keras.layers.Conv2D(
 											 filters=self.config['num_hidden_units'] // 8,
 											 kernel_size=(3, 1),
 											 strides=1,
 											 padding='same',
 											 activation=tf.nn.leaky_relu,
-											 kernel_initializer=init)
+											 kernel_initializer=init)(decoded_3)
 				decoded_4 = tf.nn.depth_to_space(input=decoded_4,
 												 block_size=2)
 				decoded_4 = tf.reshape(decoded_4, [-1, 16, 1, self.config['num_hidden_units'] // 16])
 				print("decoded_4 is: {}".format(decoded_4))
-				decoded_5 = tf.layers.conv2d(decoded_4,
+				decoded_5 = tf.keras.layers.Conv2D(
 											 filters=self.config['num_hidden_units'] // 16,
 											 kernel_size=(3, 1),
 											 strides=1,
 											 padding='same',
 											 activation=tf.nn.leaky_relu,
-											 kernel_initializer=init)
+											 kernel_initializer=init)(decoded_4)
 				decoded_5 = tf.nn.depth_to_space(input=decoded_5,
 												 block_size=2)
 				decoded_5 = tf.reshape(decoded_5, [-1, self.config['num_hidden_units'] // 16, 1, 16])
 				print("decoded_5 is: {}".format(decoded_5))
-				decoded = tf.layers.conv2d(inputs=decoded_5,
+				decoded = tf.keras.layers.Conv2D(
 										   filters=self.config['n_channel'],
 										   kernel_size=(9, 1),
 										   strides=1,
 										   padding='valid',
 										   activation=None,
-										   kernel_initializer=init)
+										   kernel_initializer=init)(decoded_5)
 				print("decoded_6 is: {}".format(decoded))
 				self.decoded = tf.reshape(decoded, [-1, self.config['l_win'], self.config['n_channel']])
 			elif self.config['l_win'] == 48:
-				decoded_2 = tf.layers.conv2d(decoded_1,
+				decoded_2 = tf.keras.layers.Conv2D(
 											 filters=256 * 3,
 											 kernel_size=1,
 											 padding='same',
-											 activation=tf.nn.leaky_relu)
+											 activation=tf.nn.leaky_relu)(decoded_1)
 				decoded_2 = tf.reshape(decoded_2, [-1, 3, 1, 256])
 				print("decoded_2 is: {}".format(decoded_2))
-				decoded_3 = tf.layers.conv2d(decoded_2,
+				decoded_3 = tf.keras.layers.Conv2D(
 											 filters=256,
 											 kernel_size=(3, 1),
 											 strides=1,
 											 padding='same',
 											 activation=tf.nn.leaky_relu,
-											 kernel_initializer=init)
+											 kernel_initializer=init)(decoded_2)
 				decoded_3 = tf.nn.depth_to_space(input=decoded_3,
 												 block_size=2)
 				decoded_3 = tf.reshape(decoded_3, [-1, 6, 1, 128])
 				print("decoded_3 is: {}".format(decoded_3))
-				decoded_4 = tf.layers.conv2d(decoded_3,
+				decoded_4 = tf.keras.layers.Conv2D(
 											 filters=128,
 											 kernel_size=(3, 1),
 											 strides=1,
 											 padding='same',
 											 activation=tf.nn.leaky_relu,
-											 kernel_initializer=init)
+											 kernel_initializer=init)(decoded_3)
 				decoded_4 = tf.nn.depth_to_space(input=decoded_4,
 												 block_size=2)
 				decoded_4 = tf.reshape(decoded_4, [-1, 24, 1, 32])
 				print("decoded_4 is: {}".format(decoded_4))
-				decoded_5 = tf.layers.conv2d(decoded_4,
+				decoded_5 = tf.keras.layers.Conv2D(
 											 filters=32,
 											 kernel_size=(3, 1),
 											 strides=1,
 											 padding='same',
 											 activation=tf.nn.leaky_relu,
-											 kernel_initializer=init)
+											 kernel_initializer=init)(decoded_4)
 				decoded_5 = tf.nn.depth_to_space(input=decoded_5,
 												 block_size=2)
 				decoded_5 = tf.reshape(decoded_5, [-1, 48, 1, 16])
 				print("decoded_5 is: {}".format(decoded_5))
-				decoded = tf.layers.conv2d(inputs=decoded_5,
+				decoded = tf.keras.layers.Conv2D(
 										   filters=self.config['n_channel'],
 										   kernel_size=(5, self.config['n_channel']),
 										   strides=1,
 										   padding='same',
 										   activation=None,
-										   kernel_initializer=init)
+										   kernel_initializer=init)(decoded_5)
 				print("decoded_6 is: {}".format(decoded))
 				self.decoded = tf.reshape(decoded, [-1, self.config['l_win'], self.config['n_channel']])
 			elif self.config['l_win'] == 144:
-				decoded_2 = tf.layers.conv2d(decoded_1,
+				decoded_2 = tf.keras.layers.Conv2D(
 											 filters=32 * 27,
 											 kernel_size=1,
 											 strides=1,
 											 padding='same',
-											 activation=tf.nn.leaky_relu)
+											 activation=tf.nn.leaky_relu)(decoded_1)
 				decoded_2 = tf.reshape(decoded_2, [-1, 3, 1, 32 * 9])
 				print("decoded_2 is: {}".format(decoded_2))
-				decoded_3 = tf.layers.conv2d(decoded_2,
+				decoded_3 = tf.keras.layers.Conv2D(
 											 filters=32 * 9,
 											 kernel_size=(3, 1),
 											 strides=1,
 											 padding='same',
 											 activation=tf.nn.leaky_relu,
-											 kernel_initializer=init)
+											 kernel_initializer=init)(decoded_2)
 				decoded_3 = tf.nn.depth_to_space(input=decoded_3,
 												 block_size=3)
 				decoded_3 = tf.reshape(decoded_3, [-1, 9, 1, 32 * 3])
 				print("decoded_3 is: {}".format(decoded_3))
-				decoded_4 = tf.layers.conv2d(decoded_3,
+				decoded_4 = tf.keras.layers.Conv2D(
 											 filters=32 * 3,
 											 kernel_size=(3, 1),
 											 strides=1,
 											 padding='same',
 											 activation=tf.nn.leaky_relu,
-											 kernel_initializer=init)
+											 kernel_initializer=init)(decoded_3)
 				decoded_4 = tf.nn.depth_to_space(input=decoded_4,
 												 block_size=2)
 				decoded_4 = tf.reshape(decoded_4, [-1, 36, 1, 24])
 				print("decoded_4 is: {}".format(decoded_4))
-				decoded_5 = tf.layers.conv2d(decoded_4,
+				decoded_5 = tf.keras.layers.Conv2D(
 											 filters=24,
 											 kernel_size=(3, 1),
 											 strides=1,
 											 padding='same',
 											 activation=tf.nn.leaky_relu,
-											 kernel_initializer=init)
+											 kernel_initializer=init)(decoded_4)
 				decoded_5 = tf.nn.depth_to_space(input=decoded_5,
 												 block_size=2)
 				decoded_5 = tf.reshape(decoded_5, [-1, 144, 1, 6])
 				print("decoded_5 is: {}".format(decoded_5))
-				decoded = tf.layers.conv2d(inputs=decoded_5,
+				decoded = tf.keras.layers.Conv2D(
 										   filters=1,
 										   kernel_size=(9, self.config['n_channel']),
 										   strides=1,
 										   padding='same',
 										   activation=None,
-										   kernel_initializer=init)
+										   kernel_initializer=init)(decoded_5)
 				print("decoded_6 is: {}".format(decoded))
 				self.decoded = tf.reshape(decoded, [-1, self.config['l_win'], self.config['n_channel']])
 		print("finish decoder: \n{}".format(self.decoded))
 		print('\n')
 
 		# define sigma2 parameter to be trained to optimise ELBO
-		with tf.variable_scope('sigma2_dataset'):
+		with tf.compat.v1.variable_scope('sigma2_dataset'):
 			if self.config['TRAIN_sigma'] == 1:
 				sigma = tf.Variable(tf.cast(self.config['sigma'], tf.float32),
 									dtype=tf.float32, trainable=True)
@@ -344,7 +350,7 @@ class lstmKerasModel:
 		LSTM2 = tf.keras.layers.LSTM(config['num_hidden_units_lstm'], return_sequences=True)(LSTM1)
 		lstm_output = tf.keras.layers.LSTM(config['code_size'], return_sequences=True, activation=None)(LSTM2)
 		lstm_model = tf.keras.Model(lstm_input, lstm_output)
-		lstm_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=config['learning_rate_lstm']),
+		lstm_model.compile(optimizer=tf.keras.optimizers.legacy.Adam(learning_rate=config['learning_rate_lstm']),
 						   loss='mse',
 						   metrics=['mse'])
 		return lstm_model

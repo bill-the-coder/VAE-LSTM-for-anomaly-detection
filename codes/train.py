@@ -8,6 +8,9 @@ from utils import process_config, create_dirs, get_args, save_config
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
+tf.compat.v1.disable_eager_execution()  # 关闭 Eager 模式
+#tf.compat.v1.disable_v2_behavior()
+os.environ['TF_USE_LEGACY_KERAS'] = 'True'
 
 def main():
 	# capture the config path from the run arguments
@@ -24,7 +27,7 @@ def main():
 	# save the config in a txt file
 	save_config(config)
 	# create tensorflow session
-	sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+	sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(log_device_placement=True))
 	# create your data generator
 	data = DataGenerator(config)
 	# create a CNN model
